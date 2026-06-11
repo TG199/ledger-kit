@@ -1,13 +1,16 @@
-use std::ops::{Add, Sub};
 use std::fmt;
+use std::ops::{Add, Sub};
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Money(i64);
 
-
 impl Money {
     pub fn new(amount: i64) -> Self {
         Money(amount)
+    }
+
+    pub fn value(&self) -> i64 {
+        self.0
     }
 }
 
@@ -27,11 +30,10 @@ impl Sub for Money {
     }
 }
 
-
 impl fmt::Display for Money {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let naira = self.0 / 100;
-        let kobo  = self.0.abs() % 100;
+        let kobo = self.0.abs() % 100;
         write!(f, "₦{}.{:02}", naira, kobo)
     }
 }

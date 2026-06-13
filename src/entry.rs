@@ -6,7 +6,7 @@ pub enum EntryType {
     Credit,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Entry {
     pub account_id: String,
     pub amount: Money,

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::account::{Account, AccountType};
 use crate::error::LedgerError;
 use crate::transaction::Transaction;
-use crate::entry::EntryType;
+use crate::entry::{Entry, EntryType};
 use crate::money::Money;
 
 #[derive(Debug, Clone)]
@@ -72,15 +72,29 @@ impl Ledger {
     }
 
     pub fn reverse(&mut self, tx_id: &str) -> Result<String, LedgerError> {
-
-        let original = self.transanctions
+        let original_tx = self.transactions
             .iter()
-            .filte(|orig_id|);
+            .find(|tx| tx.id() == tx_id)
+            .ok_or_else(|| LedgerError::TransactionNotFound)?;
 
-        if !original {
-            return Err(LedgerError::TransactionNotFound);
-        }
+        let id = format!("reversal-{}", tx_id);
 
+        let reversed_entries: Vec<Entry> = original_tx
+            .entries()
+            .iter()
+            .map(|e| match e.entry_type {
+                EntryType::Debit => Entry::credit(&e.account_id, e.amount),
+                EntryType::Credit => Entry::debit(&e.account_id, e.amount),
+            })
+        .collect();
+
+        let reversed_tx = Transaction::new(&id, reversed_entries);
+
+        self.post(reversed_tx)
+    }
+
+    pub fn transaction_count(&self) -> usize {
+        self.transactions.len()
     }
 }
 
@@ -187,4 +201,54 @@ mod tests {
         assert_eq!(cash_balance, Money::new(500));
         assert_eq!(wallet_balance, Money::new(-500));
     }
+
+    #[test]
+    fn reversal_zeroes_balance() {
+        let mut ledger = setup_ledger();
+
+         let tx = Transaction::new("X", vec![
+            Entry::debit(
+                "cash",
+                Money::new(500),
+            ),
+
+            Entry::credit(
+                "wallet",
+                Money::new(500),
+            ),
+        ]);
+
+        ledger.post(tx.clone()).unwrap();
+        let _ = ledger.reverse(tx.id());
+
+        let cash_balance = ledger.balance("cash").unwrap();
+
+        assert_eq!(cash_balance, Money::new(0));
+
+    }
+
+    #[test]
+    fn reversal_creates_new_transaction() {
+
+         let mut ledger = setup_ledger();
+
+         let tx = Transaction::new("X", vec![
+            Entry::debit(
+                "cash",
+                Money::new(500),
+            ),
+
+            Entry::credit(
+                "wallet",
+                Money::new(500),
+            ),
+        ]);
+
+         let tx_id = tx.id().to_string();
+         ledger.post(tx).unwrap();
+         let _ = ledger.reverse(&tx_id);
+
+         assert_eq!(ledger.transactions.len(), 2);
+    }
 }
+

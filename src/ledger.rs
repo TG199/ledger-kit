@@ -36,7 +36,7 @@ impl Ledger {
     pub fn post(&mut self, tx: Transaction) -> Result<String, LedgerError> {
         tx.validate()?;
 
-        let entries = &tx.entries;
+        let entries = &tx.entries();
 
         if entries
             .iter()
@@ -45,20 +45,21 @@ impl Ledger {
             return Err(LedgerError::AccountNotFound);
         }
 
-        let tx_post_id = tx.id.clone();
+        let binding = tx.clone();
+        let tx_post_id = binding.id();
         self.transactions.push(tx);
 
-        Ok(tx_post_id)
+        Ok(tx_post_id.to_string())
     }
 
-    pub fn balance(&self, account_id: &str) -> Result<Money,LedgerError> {
+    pub fn balance(&self, account_id: &str) -> Result<Money, LedgerError> {
         if !self.accounts.contains_key(account_id) {
             return Err(LedgerError::AccountNotFound);
         }
 
         let balance = self.transactions
             .iter()
-            .flat_map(|tx| tx.entries.iter())
+            .flat_map(|tx| tx.entries().iter())
             .filter(|e| e.account_id == account_id)
             .fold(Money::new(0), |acc, entry| {
                 match entry.entry_type {
@@ -68,6 +69,18 @@ impl Ledger {
         });
 
         Ok(balance)
+    }
+
+    pub fn reverse(&mut self, tx_id: &str) -> Result<String, LedgerError> {
+
+        let original = self.transanctions
+            .iter()
+            .filte(|orig_id|);
+
+        if !original {
+            return Err(LedgerError::TransactionNotFound);
+        }
+
     }
 }
 

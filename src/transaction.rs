@@ -3,8 +3,8 @@ use crate::error::LedgerError;
 
 #[derive(Clone, Debug)]
 pub struct Transaction {
-    pub id: String,
-    pub entries: Vec<Entry>,
+    id: String,
+    entries: Vec<Entry>,
 }
 
 impl Transaction {
@@ -13,6 +13,13 @@ impl Transaction {
             id: id.into(),
             entries,
         }
+    }
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub fn entries(&self) -> &[Entry] {
+        &self.entries
     }
 
     pub fn validate(&self) -> Result<(), LedgerError> {

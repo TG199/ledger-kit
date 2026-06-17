@@ -1,12 +1,14 @@
 use crate::money::Money;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum EntryType {
     Debit,
     Credit,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Entry {
     pub account_id: String,
     pub amount: Money,

@@ -6,7 +6,9 @@ use crate::transaction::Transaction;
 use crate::entry::{Entry, EntryType};
 use crate::money::Money;
 
-#[derive(Debug, Clone)]
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Ledger {
     accounts: HashMap<String, Account>,
     transactions: Vec<Transaction>,
@@ -77,8 +79,6 @@ impl Ledger {
             .find(|tx| tx.id() == tx_id)
             .ok_or_else(|| LedgerError::TransactionNotFound)?;
 
-        let id = format!("reversal-{}", tx_id);
-
         let reversed_entries: Vec<Entry> = original_tx
             .entries()
             .iter()
@@ -88,13 +88,31 @@ impl Ledger {
             })
         .collect();
 
-        let reversed_tx = Transaction::new(&id, reversed_entries);
+        let reversed_tx = Transaction::new(reversed_entries);
 
         self.post(reversed_tx)
     }
 
     pub fn transaction_count(&self) -> usize {
         self.transactions.len()
+    }
+
+    pub fn history(&self, account_id: &str) -> Result<Vec<&Transaction>, LedgerError> {
+        if !self.accounts.contains_key(account_id) {
+            return Err(LedgerError::AccountNotFound);
+        }
+
+        let txns = self.transactions
+            .iter()
+            .filter(|tx| {
+                tx.entries()
+                    .iter()
+                    .any(|e| e.account_id == account_id)
+
+        })
+        .collect();
+
+        Ok(txns)
     }
 }
 
@@ -118,7 +136,7 @@ mod tests {
     fn accepts_balanced_transaction() {
         let mut ledger = setup_ledger();
 
-        let tx = Transaction::new("X", vec![
+        let tx = Transaction::new(vec![
             Entry::debit(
                 "cash",
                 Money::new(100),
@@ -138,7 +156,7 @@ mod tests {
     fn rejects_unbalanced_transaction() {
         let mut ledger = setup_ledger();
 
-        let tx = Transaction::new("X", vec![
+        let tx = Transaction::new(vec![
             Entry::debit(
                 "cash",
                 Money::new(1000),
@@ -160,7 +178,7 @@ mod tests {
     fn rejects_missing_account() {
         let mut ledger = setup_ledger();
 
-        let tx = Transaction::new("X", vec![
+        let tx = Transaction::new(vec![
             Entry::debit(
                 "cash",
                 Money::new(100),
@@ -181,7 +199,7 @@ mod tests {
     fn calculates_balance_after_posting() {
         let mut ledger = setup_ledger();
 
-        let tx = Transaction::new("X", vec![
+        let tx = Transaction::new(vec![
             Entry::debit(
                 "cash",
                 Money::new(500),
@@ -206,7 +224,7 @@ mod tests {
     fn reversal_zeroes_balance() {
         let mut ledger = setup_ledger();
 
-         let tx = Transaction::new("X", vec![
+         let tx = Transaction::new(vec![
             Entry::debit(
                 "cash",
                 Money::new(500),
@@ -232,7 +250,7 @@ mod tests {
 
          let mut ledger = setup_ledger();
 
-         let tx = Transaction::new("X", vec![
+         let tx = Transaction::new(vec![
             Entry::debit(
                 "cash",
                 Money::new(500),
@@ -249,6 +267,66 @@ mod tests {
          let _ = ledger.reverse(&tx_id);
 
          assert_eq!(ledger.transactions.len(), 2);
+    }
+
+    #[test]
+    fn history_returns_relevant_transactions() {
+        let mut ledger = setup_ledger();
+
+         let tx1 = Transaction::new(vec![
+            Entry::debit(
+                "cash",
+                Money::new(500),
+            ),
+
+            Entry::credit(
+                "cash",
+                Money::new(500),
+            ),
+        ]);
+
+        let tx2 = Transaction::new(vec![
+            Entry::debit(
+                "cash",
+                Money::new(500),
+            ),
+
+            Entry::credit(
+                "cash",
+                Money::new(500),
+            ),
+        ]);
+
+        let tx3 = Transaction::new(vec![
+            Entry::debit(
+                "wallet",
+                Money::new(500),
+            ),
+
+            Entry::credit(
+                "wallet",
+                Money::new(500),
+            ),
+        ]);
+
+        ledger.post(tx1).unwrap();
+        ledger.post(tx2).unwrap();
+        ledger.post(tx3).unwrap();
+
+        let history = ledger.history("cash");
+
+        assert_eq!(history.unwrap().len(), 2);
+    }
+
+    #[test]
+    fn transaction_serializes_to_json() {
+        let tx = Transaction::new(vec![
+            Entry::debit("cash", Money::new(1000)),
+            Entry::credit("wallet", Money::new(1000)),
+        ]);
+        let json = serde_json::to_string(&tx).unwrap();
+        let restored: Transaction = serde_json::from_str(&json).unwrap();
+        assert_eq!(tx.id(), restored.id());
     }
 }
 

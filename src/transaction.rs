@@ -1,16 +1,20 @@
 use crate::entry::{Entry, EntryType};
 use crate::error::LedgerError;
 
-#[derive(Clone, Debug)]
+use uuid::Uuid;
+
+use serde::{Serialize, Deserialize};
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Transaction {
     id: String,
     entries: Vec<Entry>,
 }
 
 impl Transaction {
-    pub fn new(id: &str, entries: Vec<Entry>) -> Self {
+    pub fn new(entries: Vec<Entry>) -> Self {
         Transaction {
-            id: id.into(),
+            id: Uuid::new_v4().to_string(),
             entries,
         }
     }

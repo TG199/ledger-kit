@@ -4,4 +4,5 @@ pub enum LedgerError {
     EmptyTransaction,
     AccountNotFound,
     TransactionNotFound,
+    StorageError
 }

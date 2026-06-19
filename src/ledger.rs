@@ -1,24 +1,21 @@
-use std::collections::HashMap;
-
 use crate::account::{Account, AccountType};
 use crate::error::LedgerError;
 use crate::transaction::Transaction;
 use crate::entry::{Entry, EntryType};
 use crate::money::Money;
+use crate::storage::LedgerStore;
 
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Ledger {
-    accounts: HashMap<String, Account>,
-    transactions: Vec<Transaction>,
+pub struct Ledger<S: LedgerStore> {
+    store: S,
 }
 
-impl Ledger {
+impl <S: LedgerStore + Default> Ledger<S> {
     pub fn new() -> Self {
         Ledger {
-            accounts: HashMap::new(),
-            transactions: Vec::new(),
+            store: S::default(),
         }
     }
 
@@ -27,39 +24,39 @@ impl Ledger {
         id: &str,
         name: &str,
         account_type: AccountType,
-    ) -> Result<&Account, LedgerError> {
+    ) -> Result<Account, LedgerError> {
         let account = Account::new(id, name, account_type);
+        self.store.save_account(&account)?;
 
-        self.accounts.insert(id.to_string(), account);
-
-        Ok(self.accounts.get(id).unwrap())
+        Ok(account)
     }
 
     pub fn post(&mut self, tx: Transaction) -> Result<String, LedgerError> {
         tx.validate()?;
 
         let entries = &tx.entries();
+        let accounts = self.store.load_accounts()?;
 
         if entries
             .iter()
-            .any(|entry| !self.accounts.contains_key(&entry.account_id))
+            .any(|entry| !accounts.iter().any(|a| a.id() == entry.account_id))
         {
             return Err(LedgerError::AccountNotFound);
         }
 
         let binding = tx.clone();
         let tx_post_id = binding.id();
-        self.transactions.push(tx);
-
+        self.store.save_transaction(&tx)?;
         Ok(tx_post_id.to_string())
     }
 
     pub fn balance(&self, account_id: &str) -> Result<Money, LedgerError> {
-        if !self.accounts.contains_key(account_id) {
+        let accounts = self.store.load_accounts()?;
+        if !accounts.iter().any(|a| a.id() == account_id) {
             return Err(LedgerError::AccountNotFound);
         }
 
-        let balance = self.transactions
+        let balance = self.store.load_transactions()?
             .iter()
             .flat_map(|tx| tx.entries().iter())
             .filter(|e| e.account_id == account_id)
@@ -74,8 +71,8 @@ impl Ledger {
     }
 
     pub fn reverse(&mut self, tx_id: &str) -> Result<String, LedgerError> {
-        let original_tx = self.transactions
-            .iter()
+        let original_tx = self.store.load_transactions()?
+            .into_iter()
             .find(|tx| tx.id() == tx_id)
             .ok_or_else(|| LedgerError::TransactionNotFound)?;
 
@@ -94,16 +91,18 @@ impl Ledger {
     }
 
     pub fn transaction_count(&self) -> usize {
-        self.transactions.len()
+        self.store.load_transactions().map(|t| t.len()).unwrap_or(0)
     }
 
-    pub fn history(&self, account_id: &str) -> Result<Vec<&Transaction>, LedgerError> {
-        if !self.accounts.contains_key(account_id) {
+    pub fn history(&self, account_id: &str) -> Result<Vec<Transaction>, LedgerError> {
+        let accounts = self.store.load_accounts()?;
+
+        if !accounts.iter().any(|a| a.id() == account_id) {
             return Err(LedgerError::AccountNotFound);
         }
 
-        let txns = self.transactions
-            .iter()
+        let txns = self.store.load_transactions()?
+            .into_iter()
             .filter(|tx| {
                 tx.entries()
                     .iter()
@@ -124,9 +123,10 @@ mod tests {
     use crate::entry::Entry;
     use crate::money::Money;
     use crate::transaction::Transaction;
+    use crate::storage::InMemoryStore;
 
-    fn setup_ledger() -> Ledger {
-        let mut ledger = Ledger::new();
+    fn setup_ledger() -> Ledger::<InMemoryStore> {
+        let mut ledger = Ledger::<InMemoryStore>::new();
         ledger.create_account("cash", "Cash Account", AccountType::Asset).unwrap();
         ledger.create_account("wallet", "User Wallet", AccountType::Liability).unwrap();
         ledger
@@ -266,7 +266,7 @@ mod tests {
          ledger.post(tx).unwrap();
          let _ = ledger.reverse(&tx_id);
 
-         assert_eq!(ledger.transactions.len(), 2);
+         assert_eq!(ledger.transaction_count(), 2);
     }
 
     #[test]

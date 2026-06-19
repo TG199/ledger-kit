@@ -11,7 +11,7 @@ pub enum AccountType {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Account {
-    pub id: String,
+    id: String,
     pub name: String,
     pub account_type: AccountType,
 }
@@ -23,5 +23,9 @@ impl Account {
             name: name.into(),
             account_type,
         }
+    }
+
+    pub fn id(&self) ->&str {
+        &self.id
     }
 }

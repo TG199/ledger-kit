@@ -232,52 +232,53 @@ let balance = ledger.balance(cash)?;
 
 ## Roadmap
 
-### Phase 1
+### Phase 1 — Core Ledger
 
-Core Ledger
+- [x] Account type (Asset, Liability, Equity, Revenue, Expense)
+- [x] Money type (i64 cents, Display, Add, Sub)
+- [x] Entry type (Debit / Credit with account_id + amount)
+- [x] Transaction (batched entries with UUID id)
+- [x] Validation (balanced, non-empty enforcement)
+- [x] Create accounts
+- [x] Post transactions (reject unbalanced / missing account)
+- [x] Balance computation (sum of entries for an account)
+- [x] Reversal (create offsetting transaction by tx id)
+- [x] Transaction count
+- [x] Account history (filter transactions involving an account)
+- [x] In-memory storage backend
+- [x] JSON serialization (serde)
 
-* [ ] Accounts
-* [ ] Money type
-* [ ] Entries
-* [ ] Transactions
-* [ ] Validation
-* [ ] In-memory ledger
+### Phase 2 — Persistence
 
-### Phase 2
+- [x] Storage trait (`LedgerStore`)
+- [x] InMemoryStore (HashMap-backed, full impl)
+- [x] SQLiteStore schema (accounts + transactions tables)
+- [ ] SQLiteStore `load_transactions` and `load_accounts` (stubbed with `todo!()`)
+- [ ] SQLiteStore `save_account` (stubbed)
+- [ ] SQLite-backed `Ledger` integration tests
 
-Persistence
+### Phase 3 — Production Features
 
-* [ ] SQLite storage
-* [ ] Repository pattern
-* [ ] Serialization
-* [ ] Snapshots
+- [ ] Idempotency keys (duplicate transaction detection)
+- [ ] Multi-currency support (currency code on Money)
+- [ ] Event publishing (on_post, on_reverse hooks)
+- [ ] Transaction metadata (description, timestamp, reference)
+- [ ] Entry-level metadata
 
-### Phase 3
+### Phase 4 — Scale
 
-Production Features
+- [ ] PostgreSQL backend
+- [ ] Snapshots / checkpoints for fast balance queries
+- [ ] Streaming history (cursor / pagination)
+- [ ] High-performance batch balance computation
 
-* [ ] Idempotency
-* [ ] Multi-currency support
-* [ ] Event publishing
-* [ ] Transaction metadata
+### Phase 5 — Ecosystem
 
-### Phase 4
-
-Scale
-
-* [ ] PostgreSQL backend
-* [ ] Event sourcing
-* [ ] Streaming
-* [ ] High-performance balance computation
-
-### Phase 5
-
-Ecosystem
-
-* [ ] Python bindings
-* [ ] Node.js bindings
-* [ ] REST API
-* [ ] WASM support
+- [ ] Python bindings (PyO3)
+- [ ] Node.js bindings (napi-rs)
+- [ ] REST API (axum or actix-web)
+- [ ] WASM support
+- [ ] CLI tool for inspection
 
 ---
 

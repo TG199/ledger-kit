@@ -1,6 +1,6 @@
 use crate::account::Account;
-use crate::transaction::Transaction;
 use crate::error::LedgerError;
+use crate::transaction::Transaction;
 
 use rusqlite::{Connection, params};
 use std::collections::HashMap;
@@ -12,17 +12,16 @@ pub trait LedgerStore {
     fn load_accounts(&self) -> Result<Vec<Account>, LedgerError>;
 }
 
-
 pub struct SQLiteStore {
     conn: Connection,
 }
 
 impl SQLiteStore {
     pub fn new(path: &str) -> Result<Self, LedgerError> {
-        let conn = Connection::open(path)
-            .map_err(|_| LedgerError::StorageError)?;
+        let conn = Connection::open(path).map_err(|_| LedgerError::StorageError)?;
 
-        conn.execute_batch("
+        conn.execute_batch(
+            "
              CREATE TABLE IF NOT EXISTS accounts (
                 id TEXT PRIMARY KEY,
                 data TEXT NOT NULL
@@ -31,21 +30,23 @@ impl SQLiteStore {
                 id TEXT PRIMARY KEY,
                 data TEXT NOT NULL
             );
-            ").map_err(|_| LedgerError::StorageError)?;
+            ",
+        )
+        .map_err(|_| LedgerError::StorageError)?;
 
-            Ok(SQLiteStore { conn })
+        Ok(SQLiteStore { conn })
     }
 }
 
 impl LedgerStore for SQLiteStore {
-
     fn save_transaction(&mut self, tx: &Transaction) -> Result<(), LedgerError> {
-        let data = serde_json::to_string(tx)
+        let data = serde_json::to_string(tx).map_err(|_| LedgerError::StorageError)?;
+        self.conn
+            .execute(
+                "INSERT OR REPLACE INTO transactions (id, data) VALUES (?1, ?2)",
+                params![tx.id(), data],
+            )
             .map_err(|_| LedgerError::StorageError)?;
-        self.conn.execute(
-            "INSERT OR REPLACE INTO transactions (id, data) VALUES (?1, ?2)",
-            params![tx.id(), data],
-        ).map_err(|_| LedgerError::StorageError)?;
         Ok(())
     }
 

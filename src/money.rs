@@ -1,7 +1,7 @@
 use std::fmt;
 use std::ops::{Add, Sub};
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct Money(i64);

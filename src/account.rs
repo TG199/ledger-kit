@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AccountType {
@@ -25,7 +25,7 @@ impl Account {
         }
     }
 
-    pub fn id(&self) ->&str {
+    pub fn id(&self) -> &str {
         &self.id
     }
 }

@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::account::{Account, AccountType};
 use crate::entry::{Entry, EntryType};
 use crate::error::LedgerError;
+use crate::money::Currency;
 use crate::money::Money;
 use crate::storage::LedgerStore;
 use crate::transaction::Transaction;
@@ -80,12 +81,14 @@ impl<S: LedgerStore + Default> Ledger<S> {
             .iter()
             .flat_map(|tx| tx.entries().iter())
             .filter(|e| e.account_id == account_id)
-            .fold(Money::new(0), |acc, entry| match entry.entry_type {
-                EntryType::Debit => acc + entry.amount,
-                EntryType::Credit => acc - entry.amount,
+            .try_fold(Money::new(0, Currency::NGN), |acc, entry| {
+                match entry.entry_type {
+                    EntryType::Debit => acc.add(&entry.amount),
+                    EntryType::Credit => acc.sub(&entry.amount),
+                }
             });
 
-        Ok(balance)
+        Ok(balance?)
     }
 
     pub fn reverse(
@@ -143,6 +146,7 @@ mod tests {
     use crate::money::Money;
     use crate::storage::InMemoryStore;
     use crate::transaction::Transaction;
+    use crate::money::Currency;
 
     fn setup_ledger() -> Ledger<InMemoryStore> {
         let mut ledger = Ledger::<InMemoryStore>::new();
@@ -161,8 +165,8 @@ mod tests {
 
         let idempotency_key = Some("x");
         let tx = Transaction::new(vec![
-            Entry::debit("cash", Money::new(100)),
-            Entry::credit("wallet", Money::new(100)),
+            Entry::debit("cash", Money::new(100, Currency::NGN)),
+            Entry::credit("wallet", Money::new(100, Currency::NGN)),
         ]);
 
         assert!(ledger.post(tx, idempotency_key).is_ok());
@@ -174,8 +178,8 @@ mod tests {
 
         let idempotency_key = Some("x");
         let tx = Transaction::new(vec![
-            Entry::debit("cash", Money::new(1000)),
-            Entry::credit("wallet", Money::new(100)),
+            Entry::debit("cash", Money::new(1000, Currency::NGN)),
+            Entry::credit("wallet", Money::new(100, Currency::NGN)),
         ]);
 
         assert!(matches!(
@@ -190,8 +194,8 @@ mod tests {
 
         let idempotency_key = Some("x");
         let tx = Transaction::new(vec![
-            Entry::debit("cash", Money::new(100)),
-            Entry::credit("does_not_exist", Money::new(100)),
+            Entry::debit("cash", Money::new(100, Currency::NGN)),
+            Entry::credit("does_not_exist", Money::new(100, Currency::NGN)),
         ]);
 
         assert!(matches!(
@@ -206,8 +210,8 @@ mod tests {
 
         let idempotency_key = Some("x");
         let tx = Transaction::new(vec![
-            Entry::debit("cash", Money::new(500)),
-            Entry::credit("wallet", Money::new(500)),
+            Entry::debit("cash", Money::new(500, Currency::NGN)),
+            Entry::credit("wallet", Money::new(500, Currency::NGN)),
         ]);
 
         ledger.post(tx, idempotency_key).unwrap();
@@ -215,8 +219,8 @@ mod tests {
         let cash_balance = ledger.balance("cash").unwrap();
         let wallet_balance = ledger.balance("wallet").unwrap();
 
-        assert_eq!(cash_balance, Money::new(500));
-        assert_eq!(wallet_balance, Money::new(-500));
+        assert_eq!(cash_balance, Money::new(500, Currency::NGN));
+        assert_eq!(wallet_balance, Money::new(-500, Currency::NGN));
     }
 
     #[test]
@@ -225,8 +229,8 @@ mod tests {
 
         let idempotency_key = Some("x");
         let tx = Transaction::new(vec![
-            Entry::debit("cash", Money::new(500)),
-            Entry::credit("wallet", Money::new(500)),
+            Entry::debit("cash", Money::new(500, Currency::NGN)),
+            Entry::credit("wallet", Money::new(500, Currency::NGN)),
         ]);
 
         ledger.post(tx.clone(), idempotency_key).unwrap();
@@ -234,7 +238,7 @@ mod tests {
 
         let cash_balance = ledger.balance("cash").unwrap();
 
-        assert_eq!(cash_balance, Money::new(0));
+        assert_eq!(cash_balance, Money::new(0, Currency::NGN));
     }
 
     #[test]
@@ -243,8 +247,8 @@ mod tests {
 
         let idempotency_key = Some("x");
         let tx = Transaction::new(vec![
-            Entry::debit("cash", Money::new(500)),
-            Entry::credit("wallet", Money::new(500)),
+            Entry::debit("cash", Money::new(500, Currency::NGN)),
+            Entry::credit("wallet", Money::new(500, Currency::NGN)),
         ]);
 
         let tx_id = tx.id().to_string();
@@ -263,18 +267,18 @@ mod tests {
         let idempotency_key3 = Some("z");
 
         let tx1 = Transaction::new(vec![
-            Entry::debit("cash", Money::new(500)),
-            Entry::credit("cash", Money::new(500)),
+            Entry::debit("cash", Money::new(500, Currency::NGN)),
+            Entry::credit("cash", Money::new(500, Currency::NGN)),
         ]);
 
         let tx2 = Transaction::new(vec![
-            Entry::debit("cash", Money::new(500)),
-            Entry::credit("cash", Money::new(500)),
+            Entry::debit("cash", Money::new(500, Currency::NGN)),
+            Entry::credit("cash", Money::new(500, Currency::NGN)),
         ]);
 
         let tx3 = Transaction::new(vec![
-            Entry::debit("wallet", Money::new(500)),
-            Entry::credit("wallet", Money::new(500)),
+            Entry::debit("wallet", Money::new(500, Currency::NGN)),
+            Entry::credit("wallet", Money::new(500, Currency::NGN)),
         ]);
 
         ledger.post(tx1, idempotency_key1).unwrap();
@@ -289,8 +293,8 @@ mod tests {
     #[test]
     fn transaction_serializes_to_json() {
         let tx = Transaction::new(vec![
-            Entry::debit("cash", Money::new(1000)),
-            Entry::credit("wallet", Money::new(1000)),
+            Entry::debit("cash", Money::new(1000, Currency::NGN)),
+            Entry::credit("wallet", Money::new(1000, Currency::NGN)),
         ]);
         let json = serde_json::to_string(&tx).unwrap();
         let restored: Transaction = serde_json::from_str(&json).unwrap();
@@ -303,8 +307,8 @@ mod tests {
 
         let idempotency_key = Some("Key1");
         let tx = Transaction::new(vec![
-            Entry::debit("cash", Money::new(500)),
-            Entry::credit("wallet", Money::new(500)),
+            Entry::debit("cash", Money::new(500, Currency::NGN)),
+            Entry::credit("wallet", Money::new(500, Currency::NGN)),
         ]);
 
         let id1 = ledger.post(tx.clone(), idempotency_key);

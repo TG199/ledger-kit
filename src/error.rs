@@ -5,4 +5,5 @@ pub enum LedgerError {
     AccountNotFound,
     TransactionNotFound,
     StorageError,
+    CurrencyMismatch,
 }

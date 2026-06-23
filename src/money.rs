@@ -1,41 +1,51 @@
+use crate::error::LedgerError;
 use std::fmt;
-use std::ops::{Add, Sub};
 
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
-pub struct Money(i64);
+pub enum Currency {
+    NGN,
+    USD,
+    EUR,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
+pub struct Money {
+    amount: i64,
+    currency: Currency,
+}
 
 impl Money {
-    pub fn new(amount: i64) -> Self {
-        Money(amount)
+    pub fn new(amount: i64, currency: Currency) -> Self {
+        Money { amount, currency }
     }
 
     pub fn value(&self) -> i64 {
-        self.0
+        self.amount
     }
-}
 
-impl Add for Money {
-    type Output = Self;
+    pub fn add(&self, other: &Money) -> Result<Money, LedgerError> {
+        if self.currency != other.currency {
+            return Err(LedgerError::CurrencyMismatch);
+        }
 
-    fn add(self, other: Self) -> Self {
-        Money(self.0 + other.0)
+        Ok(Money::new(self.amount + other.amount, self.currency))
     }
-}
 
-impl Sub for Money {
-    type Output = Self;
+    pub fn sub(&self, other: &Money) -> Result<Money, LedgerError> {
+        if self.currency != other.currency {
+            return Err(LedgerError::CurrencyMismatch);
+        }
 
-    fn sub(self, other: Self) -> Self {
-        Money(self.0 - other.0)
+        Ok(Money::new(self.amount - other.amount, self.currency))
     }
 }
 
 impl fmt::Display for Money {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let naira = self.0 / 100;
-        let kobo = self.0.abs() % 100;
+        let naira = self.amount / 100;
+        let kobo = self.amount.abs() % 100;
         write!(f, "₦{}.{:02}", naira, kobo)
     }
 }

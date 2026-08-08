@@ -7,6 +7,7 @@ pub enum AccountType {
     Equity,
     Revenue,
     Expense,
+    Purchase,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -21,8 +21,8 @@ impl Money {
         Money { amount, currency }
     }
 
-    pub fn value(&self) -> i64 {
-        self.amount
+    pub fn value(&self) -> &i64 {
+       &self.amount
     }
 
     pub fn add(&self, other: &Money) -> Result<Money, LedgerError> {

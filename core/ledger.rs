@@ -7,13 +7,12 @@ use crate::money::Currency;
 use crate::money::Money;
 use crate::storage::LedgerStore;
 use crate::transaction::Transaction;
+use crate::event::{Event, EventBus};
 
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Ledger<S: LedgerStore> {
     store: S,
     processed_keys: HashMap<String, String>,
+    event_bus: EventBus,
 }
 
 impl<S: LedgerStore + Default> Ledger<S> {
@@ -21,6 +20,7 @@ impl<S: LedgerStore + Default> Ledger<S> {
         Ledger {
             store: S::default(),
             processed_keys: HashMap::new(),
+            event_bus: EventBus::new(),
         }
     }
 
@@ -32,7 +32,7 @@ impl<S: LedgerStore + Default> Ledger<S> {
     ) -> Result<Account, LedgerError> {
         let account = Account::new(id, name, account_type);
         self.store.save_account(&account)?;
-
+        self.event_bus.publish(&Event::AccountCreated);
         Ok(account)
     }
 
@@ -66,6 +66,7 @@ impl<S: LedgerStore + Default> Ledger<S> {
         }
 
         self.store.save_transaction(&tx)?;
+        self.event_bus.publish(&Event::TransactionPosted);
         Ok(tx_post_id.to_string())
     }
 
@@ -113,7 +114,9 @@ impl<S: LedgerStore + Default> Ledger<S> {
             .collect();
 
         let reversed_tx = Transaction::new(reversed_entries);
-        self.post(reversed_tx, idempotency_key)
+        let reversed_post = self.post(reversed_tx, idempotency_key);
+        self.event_bus.publish(&Event::TransactionReversed);
+        reversed_post
     }
 
     pub fn transaction_count(&self) -> usize {
@@ -136,6 +139,10 @@ impl<S: LedgerStore + Default> Ledger<S> {
 
         Ok(txns)
     }
+
+    pub fn subscribe(&mut self, handler: Box<dyn Fn(&Event)>) {
+        self.event_bus.subscribe(handler)
+    }
 }
 
 #[cfg(test)]
@@ -147,6 +154,8 @@ mod tests {
     use crate::storage::InMemoryStore;
     use crate::transaction::Transaction;
     use crate::money::Currency;
+    use std::rc::Rc;
+    use std::cell::Cell;
 
     fn setup_ledger() -> Ledger<InMemoryStore> {
         let mut ledger = Ledger::<InMemoryStore>::new();
@@ -316,5 +325,29 @@ mod tests {
 
         assert_eq!(id1, id2);
         assert_eq!(ledger.transaction_count(), 1);
+    }
+
+    #[test]
+    fn event_published_on_post() {
+        let mut ledger = setup_ledger();
+
+        let counter = Rc::new(Cell::new(0u32));
+        let idempotency_key = Some("event");
+
+        let counter_clone = Rc::clone(&counter);
+
+        let tx = Transaction::new(vec![
+            Entry::debit("cash", Money::new(500, Currency::NGN)),
+            Entry::credit("wallet", Money::new(500, Currency::NGN)),
+        ]);
+
+        ledger.subscribe(Box::new(move |_event| {
+            counter_clone.set(counter_clone.get() + 1);
+        }));
+
+        ledger.post(tx, idempotency_key).unwrap();
+    
+
+        assert_eq!(1, counter.get())
     }
 }

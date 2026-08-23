@@ -51,15 +51,48 @@ impl LedgerStore for SQLiteStore {
     }
 
     fn load_transactions(&self) -> Result<Vec<Transaction>, LedgerError> {
-        todo!()
+        let mut stmt = self.conn
+            .prepare("SELECT data FROM transactions")
+            .map_err(|_| LedgerError::StorageError)?;
+
+        let items = stmt.query_map([], |row| {
+            let data: String = row.get(0)?;
+            Ok(data)
+        })
+        .map_err(|_| LedgerError::StorageError)?
+        .filter_map(|r| r.ok())
+        .filter_map(|data| serde_json::from_str(&data).ok())
+        .collect();
+
+        Ok(items)
     }
 
-    fn save_account(&mut self, _account: &Account) -> Result<(), LedgerError> {
-        todo!()
+    fn save_account(&mut self, account: &Account) -> Result<(), LedgerError> {
+        let data = serde_json::to_string(account).map_err(|_| LedgerError::StorageError)?;
+        self.conn
+            .execute(
+                "INSERT OR REPLACE INTO accounts (id, data) VALUES (?1, ?2)",
+                params![account.id(), data],
+            )
+            .map_err(|_| LedgerError::StorageError)?;
+        Ok(())
     }
 
     fn load_accounts(&self) -> Result<Vec<Account>, LedgerError> {
-        todo!()
+        let mut stmt = self.conn
+            .prepare("SELECT data FROM accounts")
+            .map_err(|_| LedgerError::StorageError)?;
+
+        let items = stmt.query_map([], |row| {
+            let data: String = row.get(0)?;
+            Ok(data)
+        })
+        .map_err(|_| LedgerError::StorageError)?
+        .filter_map(|r| r.ok())
+        .filter_map(|data| serde_json::from_str(&data).ok())
+        .collect();
+
+        Ok(items)
     }
 }
 

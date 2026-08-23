@@ -64,7 +64,7 @@ impl LedgerStore for SQLiteStore {
 }
 
 pub struct InMemoryStore {
-    transactions: HashMap<String, Transaction>,
+    transactions: Vec<Transaction>,
     accounts: HashMap<String, Account>,
 }
 
@@ -76,13 +76,12 @@ impl Default for InMemoryStore {
 
 impl LedgerStore for InMemoryStore {
     fn save_transaction(&mut self, tx: &Transaction) -> Result<(), LedgerError> {
-        let id = tx.id();
-        self.transactions.insert(id.to_string(), tx.clone());
+        self.transactions.push(tx.clone());
         Ok(())
     }
 
     fn load_transactions(&self) -> Result<Vec<Transaction>, LedgerError> {
-        Ok(self.transactions.values().cloned().collect())
+        Ok(self.transactions.clone())
     }
 
     fn save_account(&mut self, account: &Account) -> Result<(), LedgerError> {
@@ -99,7 +98,7 @@ impl LedgerStore for InMemoryStore {
 impl InMemoryStore {
     pub fn new() -> Self {
         InMemoryStore {
-            transactions: HashMap::new(),
+            transactions: Vec::new(),
             accounts: HashMap::new(),
         }
     }

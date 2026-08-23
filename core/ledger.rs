@@ -8,11 +8,13 @@ use crate::money::Money;
 use crate::storage::LedgerStore;
 use crate::transaction::Transaction;
 use crate::event::{Event, EventBus};
+use crate::snapshot::AccountSnapshot;
 
 pub struct Ledger<S: LedgerStore> {
     store: S,
     processed_keys: HashMap<String, String>,
     event_bus: EventBus,
+    snapshots: HashMap<String, AccountSnapshot>,
 }
 
 impl<S: LedgerStore + Default> Ledger<S> {
@@ -21,6 +23,7 @@ impl<S: LedgerStore + Default> Ledger<S> {
             store: S::default(),
             processed_keys: HashMap::new(),
             event_bus: EventBus::new(),
+            snapshots: HashMap::new(),
         }
     }
 
@@ -76,19 +79,41 @@ impl<S: LedgerStore + Default> Ledger<S> {
             return Err(LedgerError::AccountNotFound);
         }
 
-        let balance = self
-            .store
-            .load_transactions()?
-            .iter()
-            .flat_map(|tx| tx.entries().iter())
-            .filter(|e| e.account_id == account_id)
-            .try_fold(Money::new(0, Currency::NGN), |acc, entry| {
-                match entry.entry_type {
-                    EntryType::Debit => acc.add(&entry.amount),
-                    EntryType::Credit => acc.sub(&entry.amount),
-                }
-            });
+        let balance = if let Some(snapshot) = self.snapshots.get(account_id) {
+            let all_txns = self.store.load_transactions()?;
 
+            let start = all_txns
+                .iter()
+                .position(|tx| tx.id() == snapshot.last_transaction_id)
+                .map(|i| i + 1)
+                .unwrap_or(0);
+
+            let relevant = &all_txns[start..];
+
+            relevant
+                .iter()
+                .flat_map(|tx| tx.entries().iter())
+                .filter(|e| e.account_id == account_id)
+                .try_fold(snapshot.balance, |acc, entry| {
+                    match entry.entry_type {
+                        EntryType::Debit => acc.add(&entry.amount),
+                        EntryType::Credit=> acc.sub(&entry.amount),
+                    }
+                })
+
+        } else {
+            self.store
+                .load_transactions()?
+                .iter()
+                .flat_map(|tx| tx.entries().iter())
+                .filter(|e| e.account_id == account_id)
+                .try_fold(Money::new(0, Currency::NGN), |acc, entry| {
+                    match entry.entry_type {
+                        EntryType::Debit => acc.add(&entry.amount),
+                        EntryType::Credit => acc.sub(&entry.amount),
+                    }
+                })
+        };
         Ok(balance?)
     }
 
@@ -143,6 +168,22 @@ impl<S: LedgerStore + Default> Ledger<S> {
     pub fn subscribe(&mut self, handler: Box<dyn Fn(&Event)>) {
         self.event_bus.subscribe(handler)
     }
+
+    pub fn snapshot(&mut self, account_id: &str) -> Result<(), LedgerError> {
+        let current_balance = self.balance(&account_id)?;
+
+        let last_transaction_id = self.store.load_transactions()?
+            .into_iter()
+            .filter(|tx| tx.entries().iter().any(|e| e.account_id == account_id))
+            .last()
+            .map(|tx| tx.id().to_string())
+            .unwrap_or_default();
+        let snapshot = AccountSnapshot::new(&account_id, current_balance, &last_transaction_id);
+        self.snapshots.insert(account_id.to_string(), snapshot);
+
+        Ok(())
+    }
+
 }
 
 #[cfg(test)]
@@ -349,5 +390,51 @@ mod tests {
     
 
         assert_eq!(1, counter.get())
+    }
+
+    #[test]
+    fn snapshot_balance_matches_full_replay() {
+        let mut ledger = setup_ledger();
+
+        let idempotency_key1 = Some("key1");
+        let idempotency_key2 = Some("Key2");
+        let idempotency_key3 = Some("Key3");
+        let idempotency_key4 = Some("Key4");
+        let idempotency_key5 = Some("Key5");
+
+        let tx1 = Transaction::new(vec![
+            Entry::debit("cash", Money::new(500, Currency::NGN)),
+            Entry::credit("wallet", Money::new(500, Currency::NGN)),
+        ]);
+
+        let tx2 = Transaction::new(vec![
+            Entry::debit("cash", Money::new(500, Currency::NGN)),
+            Entry::credit("wallet", Money::new(500, Currency::NGN)),
+        ]);
+
+        let tx3 = Transaction::new(vec![
+            Entry::debit("cash", Money::new(500, Currency::NGN)),
+            Entry::credit("wallet", Money::new(500, Currency::NGN)),
+        ]);
+
+        let tx4 = Transaction::new(vec![
+            Entry::debit("cash", Money::new(500, Currency::NGN)),
+            Entry::credit("wallet", Money::new(500, Currency::NGN)),
+        ]);
+
+        let tx5 = Transaction::new(vec![
+            Entry::debit("cash", Money::new(500, Currency::NGN)),
+            Entry::credit("wallet", Money::new(500, Currency::NGN)),
+        ]);
+
+        let _ = ledger.post(tx1, idempotency_key1).unwrap();
+        let _ = ledger.post(tx2, idempotency_key2);
+        let _ = ledger.post(tx3, idempotency_key3);
+
+        let _ = ledger.snapshot("cash");
+
+        let _ = ledger.post(tx4, idempotency_key4);
+        let _ = ledger.post(tx5, idempotency_key5);
+        assert_eq!(ledger.balance("cash"), Ok(Money::new(2500, Currency::NGN)));
     }
 }

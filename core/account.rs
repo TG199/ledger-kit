@@ -14,6 +14,7 @@ pub struct Account {
     id: String,
     pub name: String,
     pub account_type: AccountType,
+
 }
 
 impl Account {

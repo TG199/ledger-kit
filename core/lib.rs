@@ -6,3 +6,4 @@ pub mod money;
 pub mod storage;
 pub mod transaction;
 pub mod event;
+pub mod snapshot;
